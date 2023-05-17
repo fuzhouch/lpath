@@ -1,0 +1,6 @@
+zig-cache/
+zig-out/
+build/
+.xmake/
+.zigmod
+deps.zig
