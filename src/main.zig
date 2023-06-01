@@ -1,24 +1,35 @@
 const std = @import("std");
+const clap = @import("clap");
+const tomlz = @import("tomlz");
 
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    const params = comptime clap.parseParamsComptime(
+        \\-h, --help             Display this help and exit.
+        \\-p, --profile <str>    Profile definition TOML file.
+        );
+    var diag = clap.Diagnostic{};
+    var res = clap.parse(clap.Help, &params, clap.parsers.default, .{
+        .diagnostic = &diag,
+        .allocator = allocator
+    }) catch |err| {
+        diag.report(std.io.getStdErr().writer(), err) catch {};
+        return err;
+    };
+    defer res.deinit();
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
+    // .profile is an optional type (?[]u8).
+    if (res.args.profile) |filepath| {
+        std.debug.print("{s}, {any}\n", .{ filepath, @TypeOf(filepath) });
 
-    try bw.flush(); // don't forget to flush!
-}
+        var file = try std.fs.cwd().openFile(filepath, .{});
+        defer file.close();
 
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+        const file_content = try file.readToEndAlloc(allocator, 1024 * 1024);
+        var table = try tomlz.parse(allocator, file_content);
+        _ = table;
+    }
 }
