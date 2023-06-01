@@ -1,0 +1,10 @@
+# Define profile model
+#
+# * A profile defines a collection of levels in a game.
+# * A game contains one or more levels.
+# * A level has one and only one entry.
+# * A level has one or more exits. Each exit leads to
+#   one and only one "next level".
+# * A level can has a "skill" after passing through. For example, a BOSS
+#   fight level grants a new skill.
+# * A level can require one or more skills to enter.
