@@ -2,6 +2,15 @@ const std = @import("std");
 const clap = @import("clap");
 const tomlz = @import("tomlz");
 
+fn analyzeTable(table: *tomlz.Table) ?usize {
+    const toplevel = table.getTable("lpath") orelse return null;
+    const version = toplevel.getInteger("version") orelse 1;
+    std.debug.print("version = {}\n", .{version});
+    const levels = table.getArray("level") orelse return null;
+    std.debug.print("Lengths: {}\n", .{ levels.items().len });
+    return levels.items().len;
+}
+
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -21,15 +30,14 @@ pub fn main() !void {
     };
     defer res.deinit();
 
-    // .profile is an optional type (?[]u8).
     if (res.args.profile) |filepath| {
-        std.debug.print("{s}, {any}\n", .{ filepath, @TypeOf(filepath) });
-
         var file = try std.fs.cwd().openFile(filepath, .{});
         defer file.close();
 
         const file_content = try file.readToEndAlloc(allocator, 1024 * 1024);
         var table = try tomlz.parse(allocator, file_content);
-        _ = table;
+        defer table.deinit(allocator);
+
+        _ = analyzeTable(&table);
     }
 }
