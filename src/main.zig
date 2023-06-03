@@ -8,6 +8,7 @@ const LevelInfo = struct {
     beginGame: bool,
     endGame: bool,
     newSkills: std.AutoHashMap(usize, void),
+    requireSkills: std.AutoHashMap(usize, void),
 };
 
 const GameLevelError = error {
@@ -15,7 +16,14 @@ const GameLevelError = error {
     MissingLPathSection,
     NoLevelDefined,
     MissingLevelID,
+    LevelIDUnmatch,
 };
+
+fn detectTransitionLoop(transitionGraph: []const bool, levelInfo: []const LevelInfo) !usize {
+    _ = levelInfo;
+    _ = transitionGraph;
+    return 0;
+}
 
 fn analyzeTable(allocator: std.mem.Allocator, table: *tomlz.Table) !usize {
     const toplevel = table.getTable("lpath") orelse return GameLevelError.MissingLPathSection;
@@ -29,10 +37,14 @@ fn analyzeTable(allocator: std.mem.Allocator, table: *tomlz.Table) !usize {
     const arraySize = levels.items().len;
     const graphSize = arraySize * arraySize;
 
-    const transitionGraph = allocator.alloc(usize, graphSize) catch |err| {
+    const transitionGraph = allocator.alloc(bool, graphSize) catch |err| {
         std.debug.print("ERROR: Allocating transitionGraph {any}\n", .{err});
         return err;
     };
+    for(0..transitionGraph.len) |i| {
+        transitionGraph[i] = false;
+    }
+
     const levelInfoArray = allocator.alloc(LevelInfo, arraySize) catch |err| {
         std.debug.print("ERROR: Allocating levelInfoArray {any}\n", .{err});
         return err;
@@ -40,6 +52,9 @@ fn analyzeTable(allocator: std.mem.Allocator, table: *tomlz.Table) !usize {
 
     var skillLookup = std.StringHashMap(usize).init(allocator);
     defer skillLookup.deinit();
+
+    var levelIDLookup = std.StringHashMap(usize).init(allocator);
+    defer levelIDLookup.deinit();
 
     // Load skills. Conver from string to ID.
     if (skills) |skillDefinition| {
@@ -60,12 +75,15 @@ fn analyzeTable(allocator: std.mem.Allocator, table: *tomlz.Table) !usize {
     for (levels.items(), 0..) |level, i| {
         switch(level) {
             .table => |tbl| {
-                levelInfoArray[i].id = tbl.getString("id") orelse return GameLevelError.MissingLPathSection;
+                levelInfoArray[i].id = tbl.getString("id") orelse return GameLevelError.MissingLevelID;
+                try levelIDLookup.put(levelInfoArray[i].id, i);
                 levelInfoArray[i].description = tbl.getString("description") orelse "";
                 levelInfoArray[i].beginGame = tbl.getBool("begin-game") orelse false;
                 levelInfoArray[i].endGame = tbl.getBool("end-game") orelse false;
                 levelInfoArray[i].newSkills = std.AutoHashMap(usize, void).init(allocator);
-                // When passing a level, it's possible a player get
+                levelInfoArray[i].requireSkills = std.AutoHashMap(usize, void).init(allocator);
+
+                // When passing a level, it's possible a player gets
                 // new skills. It should be saved in level info instead
                 // of a transition context as it's a static data.
                 if (tbl.getArray("new-skill")) |newSkills| {
@@ -76,17 +94,48 @@ fn analyzeTable(allocator: std.mem.Allocator, table: *tomlz.Table) !usize {
                                     try levelInfoArray[i].newSkills.put(id, {});
                                 }
                             },
-                            else => {}, // Bad format, but ignore for now.
+                            else => {}, // Bad format but ignore for now.
                         }
                     }
-                } 
+                }
+
+                // When entering a level, it's possible a player must
+                // already have some skills as prerequisite.
+                if (tbl.getArray("require-skill")) |reqSkills| {
+                    for (reqSkills.items()) |skill| {
+                        switch(skill) {
+                            .string => |skillName| {
+                                if (skillLookup.get(skillName)) |id| {
+                                    try levelInfoArray[i].requireSkills.put(id, {});
+                                }
+                            },
+                            else => {}, // Bad format but ignore for now.
+                        }
+                    }
+                }
             },
             else => {}, // Ignore unexpected values are OK.
         }
     }
 
-    _ = transitionGraph;
-    return 0;
+    // Build transition graph
+    for (levels.items()) |level| {
+        switch(level) {
+            .table => |tbl| {
+                const fromID = tbl.getString("id") orelse return GameLevelError.MissingLPathSection;
+                if (tbl.getString("next-level")) |toID| {
+                    const fromIdx = levelIDLookup.get(fromID) orelse return GameLevelError.MissingLevelID;
+                    const toIdx = levelIDLookup.get(toID) orelse return GameLevelError.LevelIDUnmatch;
+                    // Graph is indeed a row-oriented 2D array.
+                    transitionGraph[fromIdx * arraySize + toIdx] = true;
+                }
+            },
+            else => {},
+        }
+    }
+
+    // Now content is built. Let's perform graph search.
+    return detectTransitionLoop(transitionGraph, levelInfoArray);
 }
 
 pub fn main() !void {

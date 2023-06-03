@@ -13,48 +13,48 @@
 
 [lpath]
 skill = ["pan", "glide", "fireball"]
-[[level]]
-id = "1-1"
-description = "outside-castle"
-next-level = "1-2"
-begin-game = true
-[[level]]
-id = "1-2"
-description = "entering-castle"
-next-level = "2-1"
-[[level]]
-id = "2-1"
-description = "fall-to-underground"
-next-level = "2-2"
-[[level]]
-id = "2-2"
-description = "underground-explosion-area"
-next-level = "3-1"
-[[level]]
-id = "3-1"
-description = "kitchen-zone"
-next-level = "3-2"
-[[level]]
-id = "3-2"
-description = "living-room"
-next-level = "4-1"
-[[level]]
-id = "4-1"
-description = ""
-next-level = "4-2"
-[[level]]
-id = "4-2"
-description = ""
-next-level = "boss-final"
-[[level]]
-id = "boss-skeleton"
-new-skill = ["pan"]
-[[level]]
-id = "boss-pumpkin"
-new-skill = ["fireball"]
-[[level]]
-id = "boss-ghost"
-new-skill = ["glide"]
-[[level]]
-id = "boss-final"
-end-game = true
+    [[level]]
+    id = "1-1"
+    description = "outside-castle"
+    next-level = "1-2"
+    begin-game = true
+    [[level]]
+    id = "1-2"
+    description = "entering-castle"
+    next-level = "2-1"
+    [[level]]
+    id = "2-1"
+    description = "fall-to-underground"
+    next-level = "2-2"
+    [[level]]
+    id = "2-2"
+    description = "underground-explosion-area"
+    next-level = "3-1"
+    [[level]]
+    id = "3-1"
+    description = "kitchen-zone"
+    next-level = "3-2"
+    [[level]]
+    id = "3-2"
+    description = "living-room"
+    next-level = "4-1"
+    [[level]]
+    id = "4-1"
+    description = ""
+    next-level = "4-2"
+    [[level]]
+    id = "4-2"
+    description = ""
+    next-level = "boss-final"
+    [[level]]
+    id = "boss-skeleton"
+    new-skill = ["pan"]
+    [[level]]
+    id = "boss-pumpkin"
+    new-skill = ["fireball"]
+    [[level]]
+    id = "boss-ghost"
+    new-skill = ["glide"]
+    [[level]]
+    id = "boss-final"
+    end-game = true
