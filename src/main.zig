@@ -19,9 +19,22 @@ const GameLevelError = error {
     LevelIDUnmatch,
 };
 
-fn detectTransitionLoop(transitionGraph: []const bool, levelInfo: []const LevelInfo) !usize {
-    _ = levelInfo;
-    _ = transitionGraph;
+fn detectTransitionLoop(allocator: std.mem.Allocator,
+                        transitionGraph: []const bool,
+                        levelInfo: []const LevelInfo) !usize {
+    _ = allocator;
+    const levelCount = levelInfo.len;
+    std.debug.print("Levels: {}\n", .{levelCount});
+    for(0..levelCount) |i| {
+        for(0..levelCount) |j| {
+            if (transitionGraph[i*levelCount + j]) {
+                std.debug.print("1 ", .{});
+            } else {
+                std.debug.print("0 ", .{});
+            }
+        }
+        std.debug.print("\n", .{});
+    }
     return 0;
 }
 
@@ -135,7 +148,7 @@ fn analyzeTable(allocator: std.mem.Allocator, table: *tomlz.Table) !usize {
     }
 
     // Now content is built. Let's perform graph search.
-    return detectTransitionLoop(transitionGraph, levelInfoArray);
+    return detectTransitionLoop(allocator, transitionGraph, levelInfoArray);
 }
 
 pub fn main() !void {
