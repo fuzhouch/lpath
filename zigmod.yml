@@ -1,7 +1,7 @@
-id: 3y6ibxk62j0fo2hvyfjj8wwgqkl45wdh0gm6iv9uxohyocd9
+id: fg87y30i20s51lkq3x3peso6qjkczxkepniyrgap614b0fvn
 name: lpath
 license: MIT
-description: A tool for game developer to compute level pass through track.
+description: Game level visiting tool
 root_dependencies:
-  - src: git https://github.com/Hejsil/zig-clap
   - src: git https://github.com/mattyhall/tomlz
+  - src: git https://github.com/Hejsil/zig-clap

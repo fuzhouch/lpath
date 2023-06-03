@@ -12,6 +12,7 @@
 # * A level can require one or more skills to enter.
 
 [lpath]
+skill = ["pan", "glide", "fireball"]
 [[level]]
 id = "1-1"
 description = "outside-castle"
@@ -47,13 +48,13 @@ description = ""
 next-level = "boss-final"
 [[level]]
 id = "boss-skeleton"
-new-skill = "pan"
+new-skill = ["pan"]
 [[level]]
 id = "boss-pumpkin"
-new-skill = "fireball"
+new-skill = ["fireball"]
 [[level]]
 id = "boss-ghost"
-new-skill = "glide"
+new-skill = ["glide"]
 [[level]]
 id = "boss-final"
-end-game = "true"
+end-game = true

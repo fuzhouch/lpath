@@ -4,3 +4,9 @@ build/
 .xmake/
 .zigmod
 deps.zig
+.zigmod
+deps.zig
+.zigmod
+deps.zig
+.zigmod
+deps.zig
