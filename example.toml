@@ -10,51 +10,29 @@
 # * A level can offer one or more "skills" after passing through.
 #   For example, a BOSS fight level grants a new skill.
 # * A level can require one or more skills to enter.
+#
+# * "" is a speical value because toml does not allow empty array.
+#   It's not processed in lpath.
 
 [lpath]
-skill = ["pan", "glide", "fireball"]
-    [[level]]
+skills = ["pan", "glide", "fireball"]
+
+    [[levels]]
     id = "1-1"
     description = "outside-castle"
-    next-level = "1-2"
-    begin-game = true
-    [[level]]
+    begin = true
+    next-level = { "1-2" = [""], "2-1" = ["pan"] }
+
+    [[levels]]
     id = "1-2"
-    description = "entering-castle"
-    next-level = "2-1"
-    [[level]]
+    description = "castle-gate"
+    next-level = { "bossfight-skeleton" = [""] }
+
+    [[levels]]
+    id = "bossfight-skeleton"
+    unlock-skills = [ "pan" ]
+    next-level = { "1-2" = [""] }
+
+    [[levels]]
     id = "2-1"
-    description = "fall-to-underground"
-    next-level = "2-2"
-    [[level]]
-    id = "2-2"
-    description = "underground-explosion-area"
-    next-level = "3-1"
-    [[level]]
-    id = "3-1"
-    description = "kitchen-zone"
-    next-level = "3-2"
-    [[level]]
-    id = "3-2"
-    description = "living-room"
-    next-level = "4-1"
-    [[level]]
-    id = "4-1"
-    description = ""
-    next-level = "4-2"
-    [[level]]
-    id = "4-2"
-    description = ""
-    next-level = "boss-final"
-    [[level]]
-    id = "boss-skeleton"
-    new-skill = ["pan"]
-    [[level]]
-    id = "boss-pumpkin"
-    new-skill = ["fireball"]
-    [[level]]
-    id = "boss-ghost"
-    new-skill = ["glide"]
-    [[level]]
-    id = "boss-final"
-    end-game = true
+    end = true
