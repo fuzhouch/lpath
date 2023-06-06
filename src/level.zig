@@ -1,7 +1,7 @@
 const std = @import("std");
 const tomlz = @import("tomlz");
 
-const GameError = error {
+pub const GameError = error {
     UnsupportedVersion,
     MissingLPathSection,
     SkillNameMustBeString,
@@ -10,6 +10,7 @@ const GameError = error {
     LevelIDUnmatch,
     BadLevelDefinition,
     DuplicatedLevelID,
+    NotImplemented,
 };
 
 // LevelInfo represents static information of a given level. It's a
@@ -80,6 +81,10 @@ pub const LevelLayout = struct {
             }
             std.debug.print("\n", .{});
         }
+    }
+
+    pub fn detectLoop(self: *Self) !usize {
+        return detectLoopImpl(self);
     }
 };
 
@@ -255,4 +260,122 @@ fn loadSingleLevelInfo(self: *LevelLayout, levelDef: *const tomlz.Table, idx: us
             }
         }
     }
+}
+
+// Transversal struct represents a transversal path from an entry to an
+// end.
+const Transversal = struct {
+    toBeVisitedLevelStack: std.ArrayList(usize),
+    visited: std.StringHashMap(bool), // Mark whether a node is visited.
+
+    const Self = @This();
+    pub fn deinit(self: *Self) void {
+        self.visited.deinit();
+        self.toBeVisitedLevelStack.deinit();
+    }
+
+    pub fn init(allocator: std.mem.Allocator) Self {
+        return Self{
+            .toBeVisitedLevelStack = std.ArrayList(usize).init(allocator),
+            .visited = std.StringHashMap(bool).init(allocator),
+        };
+    }
+
+    pub fn visit(self: *Self,
+        layout: *const LevelLayout,
+        entry: usize) !*TransversalResult {
+
+        return visitImpl(self, layout, entry);
+    }
+};
+
+fn detectLoopImpl(self: *LevelLayout) !usize {
+    var entries: usize = 0;
+    _ = entries;
+    for (self.levels, 0..) |lvl, id| {
+        if (lvl.beginGame) {
+            std.debug.print("Begin from {s}\n", .{lvl.id});
+            var transversal = Transversal.init(self.allocator);
+            defer transversal.deinit();
+
+            const result = try transversal.visit(self, id);
+            defer result.deinit();
+
+            for(result.paths().items) |path| {
+                if (path.deadEnd()) {
+                    // TODO: How to print path?
+                    std.debug.print("[deadend]: entry={s}\n",
+                        .{lvl.id});
+                } else {
+                    std.debug.print("[goodpath]: entry={s}\n",
+                        .{lvl.id});
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+pub const TransversalResult = struct {
+    detectedPaths: std.ArrayList(Path),
+    allocator: std.mem.Allocator,
+
+    const Self = @This();
+    fn init(allocator: std.mem.Allocator) *Self {
+        var obj = allocator.create(Self);
+        obj.paths = std.ArrayList(Path).init(allocator);
+        obj.allocator = allocator;
+        return obj;
+    }
+
+    pub fn deinit(self: Self) void {
+        for (0..self.detectedPaths.items.len) |i| {
+            self.detectedPaths.items[i].deinit();
+        }
+        self.detectedPaths.deinit();
+    }
+
+    pub fn paths(self: *Self) std.ArrayList(Path) {
+        return self.detectedPaths;
+    }
+};
+
+pub const Path = struct {
+    // Assumption: Given a direct next level B, a level A should have
+    // no more than one exit there. Thus, we just need to mark level ID
+    // in track. No need to care about which door it moves to.
+    levelTrack: std.ArrayList(usize),
+    isDeadEnd: bool,
+    hasLoop: bool,
+
+    const Self = @This();
+    fn init(allocator: std.mem.Allocator) !*Self {
+        return Self{
+            .isDeadEnd = false,
+            .hasLoop = false,
+            .levelTrack = std.ArrayList(usize).init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.levelTrack.deinit();
+    }
+
+    pub fn deadEnd(self: *const Self) bool {
+        return self.isDeadEnd;
+    }
+
+    pub fn loop(self: *const Self) bool {
+        return self.hasLoop;
+    }
+};
+
+fn visitImpl(self: *Transversal,
+    layout: *const LevelLayout,
+    entryID: usize) !*TransversalResult {
+
+    _ = layout;
+    _ = self;
+    _ = entryID;
+    return GameError.NotImplemented;
 }

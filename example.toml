@@ -21,6 +21,8 @@ skills = ["pan", "glide", "fireball"]
     id = "1-1"
     description = "outside-castle"
     begin = true
+    # Assumption: Given a direct next level B, a level A should have
+    # no more than one exit there.
     next-level = { "1-2" = [""], "2-1" = ["pan"] }
 
     [[levels]]

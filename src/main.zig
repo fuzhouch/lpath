@@ -48,6 +48,10 @@ pub fn main() !void {
         defer gameDef.deinit();
 
         gameDef.printInfo();
+
+        std.debug.print("Begin detecting path\n", .{});
+        const paths = try gameDef.detectLoop();
+        std.debug.print("Detect path count: {}", .{paths});
     }
 }
 
