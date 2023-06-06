@@ -23,7 +23,7 @@ skills = ["pan", "glide", "fireball"]
     begin = true
     # Assumption: Given a direct next level B, a level A should have
     # no more than one exit there.
-    next-level = { "1-2" = [""], "2-1" = ["pan"] }
+    next-level = { "1-2" = [""], "2-1" = [""]}
 
     [[levels]]
     id = "1-2"
@@ -33,7 +33,7 @@ skills = ["pan", "glide", "fireball"]
     [[levels]]
     id = "bossfight-skeleton"
     unlock-skills = [ "pan" ]
-    next-level = { "1-2" = [""] }
+    next-level = { "2-1" = [""] }
 
     [[levels]]
     id = "2-1"
