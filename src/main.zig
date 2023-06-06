@@ -44,7 +44,7 @@ pub fn main() !void {
         const fileContent = try loader.loadProfileContent(allocator, filepath);
         defer allocator.free(fileContent);
 
-        var gameDef = try level.initFromTOML(allocator, fileContent);
+        var gameDef = try level.GameDef.initFromTOML(allocator, fileContent);
         defer gameDef.deinit();
 
         gameDef.printInfo();

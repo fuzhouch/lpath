@@ -37,13 +37,10 @@ const LevelInfo = struct {
             kvp.value_ptr.deinit();
         }
         self.toNextRequiredSkills.deinit();
-
-        allocator.destroy(self);
-        self.* = undefined;
     }
 };
 
-pub const LevelLayout = struct {
+pub const GameDef = struct {
     version: i64,
     skills: std.StringHashMap(usize),
     levels: []LevelInfo,
@@ -53,6 +50,12 @@ pub const LevelLayout = struct {
 
     const Self = @This();
 
+    pub fn initFromTOML(allocator: std.mem.Allocator,
+                    tomlContent: []const u8) !GameDef
+    {
+        return initFromTOMLImpl(allocator, tomlContent);
+    }
+
     pub fn deinit(self: *Self) void {
         self.skills.deinit();
         for (0..self.levels.len) |i| {
@@ -61,8 +64,6 @@ pub const LevelLayout = struct {
         self.allocator.free(self.levels);
         self.levelsNameIDMap.deinit();
         self.allocator.free(self.transitionGraph);
-        self.allocator.destroy(self);
-        self.* = undefined;
     }
 
     pub fn printInfo(self: *Self) void {
@@ -88,25 +89,53 @@ pub const LevelLayout = struct {
     }
 };
 
-pub fn initFromTOML(allocator: std.mem.Allocator,
-                    tomlContent: []const u8) !*LevelLayout {
+fn initFromTOMLImpl(allocator: std.mem.Allocator,
+                    tomlContent: []const u8) !GameDef {
 
     var table = try tomlz.parse(allocator, tomlContent);
     defer table.deinit(allocator);
 
-    var layout = try allocator.create(LevelLayout);
-    layout.allocator = allocator;
-
-    try loadBasicInfo(layout, &table);
-    try loadLevels(layout, &table);
+    var layout = GameDef {
+        .version = undefined,
+        .skills = undefined,
+        .levels = undefined,
+        .levelsNameIDMap = undefined,
+        .transitionGraph = undefined,
+        .allocator = allocator,
+    };
+    try loadBasicInfo(&layout, &table);
+    try loadLevels(&layout, &table);
     return layout;
 }
 
-// ==================================================================
-// Private functions
-// ==================================================================
+fn detectLoopImpl(self: *GameDef) !usize {
+    var entries: usize = 0;
+    _ = entries;
+    for (self.levels, 0..) |lvl, id| {
+        if (lvl.beginGame) {
+            std.debug.print("Begin from {s}\n", .{lvl.id});
+            var transversal = Transversal.init(self.allocator);
+            defer transversal.deinit();
 
-fn loadBasicInfo(self: *LevelLayout, table: *tomlz.Table) !void {
+            const result = try transversal.visit(self, id);
+            defer result.deinit();
+
+            for(result.paths().items) |path| {
+                if (path.deadEnd()) {
+                    // TODO: How to print path?
+                    std.debug.print("[deadend]: entry={s}\n",
+                        .{lvl.id});
+                } else {
+                    std.debug.print("[goodpath]: entry={s}\n",
+                        .{lvl.id});
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+fn loadBasicInfo(self: *GameDef, table: *tomlz.Table) !void {
     const lpath = table.getTable("lpath") orelse {
         return GameError.MissingLPathSection;
     };
@@ -118,7 +147,7 @@ fn loadBasicInfo(self: *LevelLayout, table: *tomlz.Table) !void {
     try loadSkills(self, &lpath);
 }
 
-fn loadSkills(self: *LevelLayout, toplevel: *const tomlz.Table) !void {
+fn loadSkills(self: *GameDef, toplevel: *const tomlz.Table) !void {
     self.skills = std.StringHashMap(usize).init(self.allocator);
 
     var skillList = toplevel.getArray("skills");
@@ -144,7 +173,7 @@ fn loadSkills(self: *LevelLayout, toplevel: *const tomlz.Table) !void {
     }
 }
 
-fn loadLevels(self: *LevelLayout, table: *const tomlz.Table) !void {
+fn loadLevels(self: *GameDef, table: *const tomlz.Table) !void {
     const levels = table.getArray("levels") orelse {
         return GameError.NoLevelDefined;
     };
@@ -184,7 +213,7 @@ fn loadLevels(self: *LevelLayout, table: *const tomlz.Table) !void {
     }
 }
 
-fn loadLevelTransition(self: *LevelLayout, levelDef: *const tomlz.Table, idx: usize) !void {
+fn loadLevelTransition(self: *GameDef, levelDef: *const tomlz.Table, idx: usize) !void {
     self.levels[idx].toNextRequiredSkills = std.AutoHashMap(
         usize,
         std.AutoHashMap(usize, void)
@@ -192,7 +221,7 @@ fn loadLevelTransition(self: *LevelLayout, levelDef: *const tomlz.Table, idx: us
 
     if (levelDef.getTable("next-level")) |nextLevelPrerequisites| {
         // As tomlz does not provide iterator, we have to use
-        // LevelLayout.levelsNameIDMap to enumerate level names.
+        // GameDef.levelsNameIDMap to enumerate level names.
         var iter = self.levelsNameIDMap.iterator();
         while (iter.next()) |kvp| {
             const toLevelName = kvp.key_ptr.*;
@@ -219,7 +248,7 @@ fn loadLevelTransition(self: *LevelLayout, levelDef: *const tomlz.Table, idx: us
     }
 }
 
-fn loadSingleLevelInfo(self: *LevelLayout, levelDef: *const tomlz.Table, idx: usize) !void {
+fn loadSingleLevelInfo(self: *GameDef, levelDef: *const tomlz.Table, idx: usize) !void {
     // Level ID is required and unique, or we can't build transition
     // graph correctly.
     var idVal = levelDef.getString("id") orelse return GameError.MissingLevelID;
@@ -262,6 +291,10 @@ fn loadSingleLevelInfo(self: *LevelLayout, levelDef: *const tomlz.Table, idx: us
     }
 }
 
+// ==================================================================
+// Traversal support objects.
+// ==================================================================
+
 // Transversal struct represents a transversal path from an entry to an
 // end.
 const Transversal = struct {
@@ -275,60 +308,32 @@ const Transversal = struct {
     }
 
     pub fn init(allocator: std.mem.Allocator) Self {
-        return Self{
+        return Self {
             .toBeVisitedLevelStack = std.ArrayList(usize).init(allocator),
             .visited = std.StringHashMap(bool).init(allocator),
         };
     }
 
     pub fn visit(self: *Self,
-        layout: *const LevelLayout,
+        layout: *const GameDef,
         entry: usize) !*TransversalResult {
 
         return visitImpl(self, layout, entry);
     }
 };
 
-fn detectLoopImpl(self: *LevelLayout) !usize {
-    var entries: usize = 0;
-    _ = entries;
-    for (self.levels, 0..) |lvl, id| {
-        if (lvl.beginGame) {
-            std.debug.print("Begin from {s}\n", .{lvl.id});
-            var transversal = Transversal.init(self.allocator);
-            defer transversal.deinit();
-
-            const result = try transversal.visit(self, id);
-            defer result.deinit();
-
-            for(result.paths().items) |path| {
-                if (path.deadEnd()) {
-                    // TODO: How to print path?
-                    std.debug.print("[deadend]: entry={s}\n",
-                        .{lvl.id});
-                } else {
-                    std.debug.print("[goodpath]: entry={s}\n",
-                        .{lvl.id});
-                }
-            }
-        }
-    }
-    return 0;
-}
-
 pub const TransversalResult = struct {
     detectedPaths: std.ArrayList(Path),
-    allocator: std.mem.Allocator,
 
     const Self = @This();
-    fn init(allocator: std.mem.Allocator) *Self {
-        var obj = allocator.create(Self);
-        obj.paths = std.ArrayList(Path).init(allocator);
-        obj.allocator = allocator;
-        return obj;
+    fn init(allocator: std.mem.Allocator) Self {
+        return Self {
+            .paths = std.ArrayList(Path).init(allocator),
+            .allocator = allocator,
+        };
     }
 
-    pub fn deinit(self: Self) void {
+    pub fn deinit(self: *Self) void {
         for (0..self.detectedPaths.items.len) |i| {
             self.detectedPaths.items[i].deinit();
         }
@@ -371,7 +376,7 @@ pub const Path = struct {
 };
 
 fn visitImpl(self: *Transversal,
-    layout: *const LevelLayout,
+    layout: *const GameDef,
     entryID: usize) !*TransversalResult {
 
     _ = layout;
