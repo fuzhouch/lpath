@@ -33,7 +33,7 @@ skills = ["pan", "glide", "fireball"]
     [[stages]]
     id = "bossfight-skeleton"
     unlock-skills = [ "pan" ]
-    next-stage = { "2-1" = [""] }
+    next-stage = { "1-2" = [""] }
 
     [[stages]]
     id = "2-1"

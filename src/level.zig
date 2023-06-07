@@ -122,16 +122,18 @@ fn analyzePathImpl(self: *GameDef) !usize {
 
             for(result.paths().items) |path| {
                 if (path.deadEnd()) {
-                    std.debug.print("[deadend]: ", .{});
+                    std.debug.print("[dead]: ", .{});
+                } else if (path.loop()) {
+                    std.debug.print("[loop]: ", .{});
                 } else {
-                    std.debug.print("[goodpath]: ", .{});
+                    std.debug.print("[good]: ", .{});
                 }
                 std.debug.print("entry = {s}, track = ", .{lvl.id});
 
                 for(path.track()) |eachLvl| {
                     std.debug.print("{s} => ", .{self.stages[eachLvl].id});
                 }
-                std.debug.print("=> [done]\n", .{});
+                std.debug.print("[done]\n", .{});
             }
         }
     }
@@ -302,19 +304,16 @@ fn loadSingleLevelInfo(self: *GameDef, stageDef: *const tomlz.Table, idx: usize)
 // end.
 const Traversal = struct {
     visitingPath: std.ArrayList(Path),
-    visited: std.StringHashMap(bool), // Mark whether a node is visited.
     allocator: std.mem.Allocator,
 
     const Self = @This();
     pub fn deinit(self: *Self) void {
-        self.visited.deinit();
         self.visitingPath.deinit();
     }
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self {
             .visitingPath = std.ArrayList(Path).init(allocator),
-            .visited = std.StringHashMap(bool).init(allocator),
             .allocator = allocator, // For creating TraversalResult.
         };
     }
@@ -355,24 +354,27 @@ pub const Path = struct {
     // in track. No need to care about which door it moves to.
     stageTrack: std.ArrayList(usize),
     unlockedSkills: std.AutoHashMap(usize, void),
+    visited: std.AutoHashMap(usize, void), // For loop detection.
     isFinished: bool,
     isDeadEnd: bool,
-    hasLoop: bool,
+    isLoop: bool,
 
     const Self = @This();
     fn init(allocator: std.mem.Allocator) Self {
         return Self{
             .isFinished = false,
             .isDeadEnd = false,
-            .hasLoop = false,
+            .isLoop = false,
             .stageTrack = std.ArrayList(usize).init(allocator),
             .unlockedSkills = std.AutoHashMap(usize, void).init(allocator),
+            .visited = std.AutoHashMap(usize, void).init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.stageTrack.deinit();
         self.unlockedSkills.deinit();
+        self.visited.deinit();
     }
 
     pub fn deadEnd(self: *const Self) bool {
@@ -380,7 +382,7 @@ pub const Path = struct {
     }
 
     pub fn loop(self: *const Self) bool {
-        return self.hasLoop;
+        return self.isLoop;
     }
 
     pub fn finished(self: *const Self) bool {
@@ -402,10 +404,23 @@ fn visitImpl(self: *Traversal, gamedef: *const GameDef, entryID: usize) !Travers
     while (self.visitingPath.items.len > 0) {
         currentPath = self.visitingPath.pop();
         var currentLevelID = currentPath.stageTrack.items[currentPath.stageTrack.items.len-1];
+        if (!currentPath.visited.contains(currentLevelID)) {
+            try currentPath.visited.put(currentLevelID, {});
+        } else {
+            // A circular path is detected. This path should stop, or we
+            // fall into an endless loop.
+            currentPath.isFinished = false;
+            currentPath.isDeadEnd = false;
+            currentPath.isLoop = true;
+            try result.detectedPaths.append(currentPath);
+            continue;
+        }
+
         if (gamedef.stages[currentLevelID].endGame) {
             // We reached an end-game. One path finished.
             currentPath.isFinished = true;
             currentPath.isDeadEnd = false;
+            currentPath.isLoop = false;
             try result.detectedPaths.append(currentPath);
             continue;
         }
@@ -455,8 +470,9 @@ fn visitImpl(self: *Traversal, gamedef: *const GameDef, entryID: usize) !Travers
             // It's not end-game, while all next stage can't reach
             // over. It means there something wrong in game
             // settings.
-            currentPath.isDeadEnd = true;
             currentPath.isFinished = false;
+            currentPath.isDeadEnd = true;
+            currentPath.isLoop = false;
             try result.detectedPaths.append(currentPath);
         }
     }
@@ -480,7 +496,7 @@ fn clonePath(fromPath: *const Path, toPath: *Path) !void {
     toPath.stageTrack = try fromPath.stageTrack.clone();
     toPath.unlockedSkills = try fromPath.unlockedSkills.clone();
     toPath.isDeadEnd = fromPath.isDeadEnd;
-    toPath.hasLoop = fromPath.hasLoop;
+    toPath.isLoop = fromPath.isLoop;
 }
 
 fn printPath(path: *const Path) void {
