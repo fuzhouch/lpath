@@ -57,6 +57,10 @@ pub const GameDef = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        var skillIter = self.skills.iterator();
+        while (skillIter.next()) |kvp| {
+            self.allocator.free((kvp.key_ptr).*);
+        }
         self.skills.deinit();
         for (0..self.stages.len) |i| {
             self.stages[i].deinit(self.allocator);
@@ -135,7 +139,20 @@ fn analyzePathImpl(self: *GameDef) !usize {
                 for(path.track()) |eachLvl| {
                     std.debug.print("{s} => ", .{self.stages[eachLvl].id});
                 }
-                std.debug.print("[done]\n", .{});
+                std.debug.print("[done]", .{});
+                std.debug.print(" skills = ", .{});
+                var skillIter = path.unlockedSkills.iterator();
+                while (skillIter.next()) |kvp| {
+                    var skillID = (kvp.key_ptr).*;
+                    var nameMappingIter = self.skills.iterator();
+                    while (nameMappingIter.next()) |nameKvp| {
+                        if (skillID == (nameKvp.value_ptr).*) {
+                            var skillName = (nameKvp.key_ptr).*;
+                            std.debug.print("{s} ", .{skillName});
+                        }
+                    }
+                }
+                std.debug.print("\n", .{});
             }
         }
     }
@@ -164,7 +181,8 @@ fn loadSkills(self: *GameDef, topstage: *const tomlz.Table) !void {
             var skillName = skillNameArray.getString(i);
             if (skillName) |nameID| {
                 if (nameID.len > 0) {
-                    try self.skills.put(nameID, skillID);
+                    var nameIDDup = try self.allocator.dupe(u8, nameID);
+                    try self.skills.put(nameIDDup, skillID);
                     skillID += 1;
                 }
                 // Empty string is valid but ignored. It's used
