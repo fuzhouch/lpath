@@ -13,9 +13,9 @@ pub const GameError = error {
     NotImplemented,
 };
 
-// LevelInfo represents static information of a given level. It's a
+// LevelInfo represents static information of a given stage. It's a
 // support data structure to help transition logic design whether player
-// can move to next level.
+// can move to next stage.
 const LevelInfo = struct {
     id: []const u8,
     description: []const u8,
@@ -43,8 +43,8 @@ const LevelInfo = struct {
 pub const GameDef = struct {
     version: i64,
     skills: std.StringHashMap(usize),
-    levels: []LevelInfo,
-    levelsNameIDMap: std.StringHashMap(usize),
+    stages: []LevelInfo,
+    stagesNameIDMap: std.StringHashMap(usize),
     transitionGraph: []bool, // 2D array for transition
     allocator: std.mem.Allocator,
 
@@ -58,20 +58,20 @@ pub const GameDef = struct {
 
     pub fn deinit(self: *Self) void {
         self.skills.deinit();
-        for (0..self.levels.len) |i| {
-            self.levels[i].deinit(self.allocator);
+        for (0..self.stages.len) |i| {
+            self.stages[i].deinit(self.allocator);
         }
-        self.allocator.free(self.levels);
-        self.levelsNameIDMap.deinit();
+        self.allocator.free(self.stages);
+        self.stagesNameIDMap.deinit();
         self.allocator.free(self.transitionGraph);
     }
 
     pub fn printInfo(self: *Self) void {
-        for (0..self.levels.len) |i| {
-            std.debug.print("{} = {s}\n", .{i, self.levels[i].id});
+        for (0..self.stages.len) |i| {
+            std.debug.print("{} = {s}\n", .{i, self.stages[i].id});
         }
 
-        const dim: usize = self.levels.len;
+        const dim: usize = self.stages.len;
         for (0..dim) |x| {
             for (0..dim) |y| {
                 if (self.transitionGraph[x*dim+y]) {
@@ -84,8 +84,8 @@ pub const GameDef = struct {
         }
     }
 
-    pub fn detectLoop(self: *Self) !usize {
-        return detectLoopImpl(self);
+    pub fn analyzePath(self: *Self) !usize {
+        return analyzePathImpl(self);
     }
 };
 
@@ -98,8 +98,8 @@ fn initFromTOMLImpl(allocator: std.mem.Allocator,
     var gamedef = GameDef {
         .version = undefined,
         .skills = undefined,
-        .levels = undefined,
-        .levelsNameIDMap = undefined,
+        .stages = undefined,
+        .stagesNameIDMap = undefined,
         .transitionGraph = undefined,
         .allocator = allocator,
     };
@@ -108,10 +108,10 @@ fn initFromTOMLImpl(allocator: std.mem.Allocator,
     return gamedef;
 }
 
-fn detectLoopImpl(self: *GameDef) !usize {
+fn analyzePathImpl(self: *GameDef) !usize {
     var entries: usize = 0;
     _ = entries;
-    for (self.levels, 0..) |lvl, id| {
+    for (self.stages, 0..) |lvl, id| {
         if (lvl.beginGame) {
             std.debug.print("Begin from {s}\n", .{lvl.id});
             var transversal = Traversal.init(self.allocator);
@@ -129,9 +129,9 @@ fn detectLoopImpl(self: *GameDef) !usize {
                 std.debug.print("entry = {s}, track = ", .{lvl.id});
 
                 for(path.track()) |eachLvl| {
-                    std.debug.print("{s} -> ", .{self.levels[eachLvl].id});
+                    std.debug.print("{s} => ", .{self.stages[eachLvl].id});
                 }
-                std.debug.print("-> [done]\n", .{});
+                std.debug.print("=> [done]\n", .{});
             }
         }
     }
@@ -150,10 +150,10 @@ fn loadBasicInfo(self: *GameDef, table: *tomlz.Table) !void {
     try loadSkills(self, &lpath);
 }
 
-fn loadSkills(self: *GameDef, toplevel: *const tomlz.Table) !void {
+fn loadSkills(self: *GameDef, topstage: *const tomlz.Table) !void {
     self.skills = std.StringHashMap(usize).init(self.allocator);
 
-    var skillList = toplevel.getArray("skills");
+    var skillList = topstage.getArray("skills");
     if (skillList) |skillNameArray| {
         var skillID: usize = 0;
         for (0..skillNameArray.items().len) |i| {
@@ -177,20 +177,20 @@ fn loadSkills(self: *GameDef, toplevel: *const tomlz.Table) !void {
 }
 
 fn loadLevels(self: *GameDef, table: *const tomlz.Table) !void {
-    const levels = table.getArray("levels") orelse {
+    const stages = table.getArray("stages") orelse {
         return GameError.NoLevelDefined;
     };
-    const levelCount: usize = levels.items().len;
-    const graphCount: usize = levelCount * levelCount;
+    const stageCount: usize = stages.items().len;
+    const graphCount: usize = stageCount * stageCount;
     _ = graphCount;
 
-    self.levels = try self.allocator.alloc(LevelInfo, levelCount);
-    self.levelsNameIDMap = std.StringHashMap(usize).init(self.allocator);
+    self.stages = try self.allocator.alloc(LevelInfo, stageCount);
+    self.stagesNameIDMap = std.StringHashMap(usize).init(self.allocator);
 
-    for (levels.items(), 0..) |lvl, i| {
+    for (stages.items(), 0..) |lvl, i| {
         switch(lvl) {
-            .table => |levelDef| {
-                try loadSingleLevelInfo(self, &levelDef, i);
+            .table => |stageDef| {
+                try loadSingleLevelInfo(self, &stageDef, i);
             },
             else => {
                 return GameError.BadLevelDefinition;
@@ -198,16 +198,16 @@ fn loadLevels(self: *GameDef, table: *const tomlz.Table) !void {
         }
     }
 
-    // Loading next-level list must be a separated from
+    // Loading next-stage list must be a separated from
     // loadSingleLevelInfo() because TomlZ does not allow we enumerate
-    // keys in a table. We have to build a full list of levels so we can
-    // try the keys in next-level table.
-    const graph2DLen = self.levels.len * self.levels.len;
+    // keys in a table. We have to build a full list of stages so we can
+    // try the keys in next-stage table.
+    const graph2DLen = self.stages.len * self.stages.len;
     self.transitionGraph = try self.allocator.alloc(bool, graph2DLen);
-    for (levels.items(), 0..) |lvl, i| {
+    for (stages.items(), 0..) |lvl, i| {
         switch (lvl) {
-            .table => |levelDef| {
-                try loadLevelTransition(self, &levelDef, i);
+            .table => |stageDef| {
+                try loadLevelTransition(self, &stageDef, i);
             },
             else => {
                 return GameError.BadLevelDefinition;
@@ -216,23 +216,23 @@ fn loadLevels(self: *GameDef, table: *const tomlz.Table) !void {
     }
 }
 
-fn loadLevelTransition(self: *GameDef, levelDef: *const tomlz.Table, idx: usize) !void {
-    self.levels[idx].toNextRequiredSkills = std.AutoHashMap(
+fn loadLevelTransition(self: *GameDef, stageDef: *const tomlz.Table, idx: usize) !void {
+    self.stages[idx].toNextRequiredSkills = std.AutoHashMap(
         usize,
         std.AutoHashMap(usize, void)
     ).init(self.allocator);
 
-    if (levelDef.getTable("next-level")) |nextLevelPrerequisites| {
+    if (stageDef.getTable("next-stage")) |nextLevelPrerequisites| {
         // As tomlz does not provide iterator, we have to use
-        // GameDef.levelsNameIDMap to enumerate level names.
-        var iter = self.levelsNameIDMap.iterator();
+        // GameDef.stagesNameIDMap to enumerate stage names.
+        var iter = self.stagesNameIDMap.iterator();
         while (iter.next()) |kvp| {
             const toLevelName = kvp.key_ptr.*;
             const toLevelID = kvp.value_ptr.*;
 
             if (nextLevelPrerequisites.getArray(toLevelName)) |requiredSkills| {
                 // Now we see a path btw idx to toLevelID.
-                self.transitionGraph[idx * self.levels.len + toLevelID] = true;
+                self.transitionGraph[idx * self.stages.len + toLevelID] = true;
                 // And record required skills
                 var skillset = std.AutoHashMap(usize, void).init(self.allocator);
                 for (requiredSkills.items()) |skillName| {
@@ -245,43 +245,43 @@ fn loadLevelTransition(self: *GameDef, levelDef: *const tomlz.Table, idx: usize)
                         else => {}, // Unknown skills can be ignored now.
                     }
                 }
-                try self.levels[idx].toNextRequiredSkills.put(toLevelID, skillset);
+                try self.stages[idx].toNextRequiredSkills.put(toLevelID, skillset);
             }
         }
     }
 }
 
-fn loadSingleLevelInfo(self: *GameDef, levelDef: *const tomlz.Table, idx: usize) !void {
+fn loadSingleLevelInfo(self: *GameDef, stageDef: *const tomlz.Table, idx: usize) !void {
     // Level ID is required and unique, or we can't build transition
     // graph correctly.
-    var idVal = levelDef.getString("id") orelse return GameError.MissingLevelID;
-    self.levels[idx].id = try self.allocator.dupeZ(u8, idVal);
-    if (self.levelsNameIDMap.contains(self.levels[idx].id)) {
+    var idVal = stageDef.getString("id") orelse return GameError.MissingLevelID;
+    self.stages[idx].id = try self.allocator.dupeZ(u8, idVal);
+    if (self.stagesNameIDMap.contains(self.stages[idx].id)) {
         return GameError.DuplicatedLevelID;
     } else {
-        try self.levelsNameIDMap.put(idVal, idx);
+        try self.stagesNameIDMap.put(idVal, idx);
     }
 
     // Below are optional. They have default values.
-    self.levels[idx].beginGame = levelDef.getBool("begin") orelse false;
-    self.levels[idx].endGame = levelDef.getBool("end") orelse false;
+    self.stages[idx].beginGame = stageDef.getBool("begin") orelse false;
+    self.stages[idx].endGame = stageDef.getBool("end") orelse false;
 
     // Below are optional. They are for readability only.
-    var despVal = levelDef.getString("description") orelse "";
-    self.levels[idx].description = try self.allocator.dupeZ(u8, despVal);
+    var despVal = stageDef.getString("description") orelse "";
+    self.stages[idx].description = try self.allocator.dupeZ(u8, despVal);
 
     // Now, load unlocked skills (players get a new sill when
-    // clearing a level), or required skills (player must be unlock a
-    // skill before entering a level, or they are very likely to get
+    // clearing a stage), or required skills (player must be unlock a
+    // skill before entering a stage, or they are very likely to get
     // blocked).
-    self.levels[idx].unlockableSkills = std.AutoHashMap(usize, void).init(self.allocator);
-    if (levelDef.getArray("unlock-skills")) |skillsToAdd| {
+    self.stages[idx].unlockableSkills = std.AutoHashMap(usize, void).init(self.allocator);
+    if (stageDef.getArray("unlock-skills")) |skillsToAdd| {
         for (skillsToAdd.items()) |skill| {
             switch(skill) {
                 .string => |skillName| {
                     if (skillName.len > 0) {
                         if (self.skills.get(skillName)) |skillID| {
-                            try self.levels[idx].unlockableSkills.put(skillID, {});
+                            try self.stages[idx].unlockableSkills.put(skillID, {});
                         }
                     }
                     // Empty skill is allowed here. It's for
@@ -301,19 +301,19 @@ fn loadSingleLevelInfo(self: *GameDef, levelDef: *const tomlz.Table, idx: usize)
 // Traversal struct represents a transversal path from an entry to an
 // end.
 const Traversal = struct {
-    visitStack: std.ArrayList(Path),
+    visitingPath: std.ArrayList(Path),
     visited: std.StringHashMap(bool), // Mark whether a node is visited.
     allocator: std.mem.Allocator,
 
     const Self = @This();
     pub fn deinit(self: *Self) void {
         self.visited.deinit();
-        self.visitStack.deinit();
+        self.visitingPath.deinit();
     }
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self {
-            .visitStack = std.ArrayList(Path).init(allocator),
+            .visitingPath = std.ArrayList(Path).init(allocator),
             .visited = std.StringHashMap(bool).init(allocator),
             .allocator = allocator, // For creating TraversalResult.
         };
@@ -350,10 +350,10 @@ pub const TraversalResult = struct {
 };
 
 pub const Path = struct {
-    // Assumption: Given a direct next level B, a level A should have
-    // no more than one exit there. Thus, we just need to mark level ID
+    // Assumption: Given a direct next stage B, a stage A should have
+    // no more than one exit there. Thus, we just need to mark stage ID
     // in track. No need to care about which door it moves to.
-    levelTrack: std.ArrayList(usize),
+    stageTrack: std.ArrayList(usize),
     unlockedSkills: std.AutoHashMap(usize, void),
     isFinished: bool,
     isDeadEnd: bool,
@@ -365,13 +365,13 @@ pub const Path = struct {
             .isFinished = false,
             .isDeadEnd = false,
             .hasLoop = false,
-            .levelTrack = std.ArrayList(usize).init(allocator),
+            .stageTrack = std.ArrayList(usize).init(allocator),
             .unlockedSkills = std.AutoHashMap(usize, void).init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.levelTrack.deinit();
+        self.stageTrack.deinit();
         self.unlockedSkills.deinit();
     }
 
@@ -388,95 +388,76 @@ pub const Path = struct {
     }
 
     pub fn track(self: *const Self) []usize {
-        return self.levelTrack.items;
+        return self.stageTrack.items;
     }
 };
 
-fn visitImpl(self: *Traversal,
-    gamedef: *const GameDef,
-    entryID: usize) !TraversalResult {
-
-
+fn visitImpl(self: *Traversal, gamedef: *const GameDef, entryID: usize) !TraversalResult {
     var result = TraversalResult.init(self.allocator);
-
-    self.visitStack.clearAndFree();
-    try self.visitStack.append(Path.init(self.allocator));
-    try self.visitStack.items[self.visitStack.items.len-1].levelTrack.append(entryID);
+    self.visitingPath.clearAndFree();
+    try self.visitingPath.append(Path.init(self.allocator));
+    try self.visitingPath.items[self.visitingPath.items.len-1].stageTrack.append(entryID);
 
     var currentPath: Path = undefined;
-    while (self.visitStack.items.len > 0) {
-        std.debug.print("new loop: {}\n", .{self.visitStack.items.len});
-        currentPath = self.visitStack.pop();
-        var stopTrackingCurrentPath: bool = false;
-        while (!stopTrackingCurrentPath) {
-            var currentLevelID = currentPath.levelTrack.items[currentPath.levelTrack.items.len-1];
-            std.debug.print("tracking: {}\n", .{currentLevelID});
-            printPath(&currentPath);
+    while (self.visitingPath.items.len > 0) {
+        currentPath = self.visitingPath.pop();
+        var currentLevelID = currentPath.stageTrack.items[currentPath.stageTrack.items.len-1];
+        if (gamedef.stages[currentLevelID].endGame) {
+            // We reached an end-game. One path finished.
+            currentPath.isFinished = true;
+            currentPath.isDeadEnd = false;
+            try result.detectedPaths.append(currentPath);
+            continue;
+        }
 
-            if (gamedef.levels[currentLevelID].endGame) {
-                // We reached an end-game. One path finished.
-                currentPath.isFinished = true;
-                currentPath.isDeadEnd = false;
-                try result.detectedPaths.append(currentPath);
-                stopTrackingCurrentPath = true;
-                std.debug.print("endgame: {}, {}\n", .{currentLevelID, self.visitStack.items.len});
-                printPath(&currentPath);
-                continue;
+        // If it's not end-game, let's see how many branches we can
+        // get. Note we expect at least one next step found. If
+        // nothing found, it means it's a dead-end.
+
+        // Update unlocked skills in this stage.
+        var si = gamedef.stages[currentLevelID].unlockableSkills.iterator();
+        while (si.next()) |kvp| {
+            const skillToUnlockID = (kvp.key_ptr).*;
+            if (!currentPath.unlockedSkills.contains(skillToUnlockID)) {
+                try currentPath.unlockedSkills.put(skillToUnlockID, {});
             }
-
-            // If it's not end-game, let's see how many branches we can
-            // get. Note we expect at least one next step found. If
-            // nothing found, it means it's a dead-end.
-
-            // Update unlocked skills in this level.
-            var si = gamedef.levels[currentLevelID].unlockableSkills.iterator();
-            while (si.next()) |kvp| {
-                const skillToUnlockID = (kvp.key_ptr).*;
-                if (!currentPath.unlockedSkills.contains(skillToUnlockID)) {
-                    try currentPath.unlockedSkills.put(skillToUnlockID, {});
+        }
+        // Decide next stage to go. A successful move happens only
+        // when a) an exit exists, and b) all required skills have
+        // been unlocked.
+        var nextStepBranches: usize = 0;
+        var li = gamedef.stages[currentLevelID].toNextRequiredSkills.iterator();
+        while (li.next()) |kvp| {
+            var nextLevelID: usize = (kvp.key_ptr).*;
+            var skillsRequiredToNextLevel: *const std.AutoHashMap(usize, void) = kvp.value_ptr;
+            if (allSkillMatched(skillsRequiredToNextLevel, &currentPath.unlockedSkills)) {
+                if (nextStepBranches == 0) {
+                    try currentPath.stageTrack.append(nextLevelID);
+                    try self.visitingPath.append(currentPath);
+                    nextStepBranches += 1;
+                } else {
+                    // There's a new branch here.
+                    // Let's keep it in stack. Note that given we
+                    // use stack here, we apply a deep-first search.
+                    var newBranchPath = Path.init(self.allocator);
+                    try clonePath(&currentPath, &newBranchPath);
+                    // Remove next step added on nextStepBranches == 0
+                    _ = newBranchPath.stageTrack.pop();
+                    // Now add true next stage
+                    try newBranchPath.stageTrack.append(nextLevelID);
+                    try self.visitingPath.append(newBranchPath);
+                    nextStepBranches += 1;
                 }
             }
-            // Decide next level to go. A successful move happens only
-            // when a) an exit exists, and b) all required skills have
-            // been unlocked.
-            var nextStepBranches: usize = 0;
-            var li = gamedef.levels[currentLevelID].toNextRequiredSkills.iterator();
-            while (li.next()) |kvp| {
-                var nextLevelID: usize = (kvp.key_ptr).*;
-                var skillsRequiredToNextLevel: *const std.AutoHashMap(usize, void) = kvp.value_ptr;
-                if (allSkillMatched(skillsRequiredToNextLevel, &currentPath.unlockedSkills)) {
-                    if (nextStepBranches == 0) {
-                        try currentPath.levelTrack.append(nextLevelID);
-                        try self.visitStack.append(currentPath);
-                        nextStepBranches += 1;
-                        std.debug.print("branch1: {}, {}\n", .{currentLevelID, nextLevelID});
-                    } else {
-                        // There's a new branch here.
-                        // Let's keep it in stack. Note that given we
-                        // use stack here, we apply a deep-first search.
-                        var newBranchPath = Path.init(self.allocator);
-                        try clonePath(&currentPath, &newBranchPath);
-                        // Remove level added on nextStepBranches == 0
-                        _ = newBranchPath.levelTrack.pop();
-                        try newBranchPath.levelTrack.append(nextLevelID);
-                        try self.visitStack.append(newBranchPath);
-                        nextStepBranches += 1;
-                        std.debug.print("branch2: {}, {}\n", .{currentLevelID, nextLevelID});
-                        printPath(&currentPath);
-                    }
-                }
-            }
+        }
 
-            if (nextStepBranches == 0) {
-                // It's not end-game, while all next level can't reach
-                // over. It means there something wrong in game
-                // settings.
-                currentPath.isDeadEnd = true;
-                currentPath.isFinished = false;
-                try result.detectedPaths.append(currentPath);
-                _ = self.visitStack.pop();
-                stopTrackingCurrentPath = true;
-            }
+        if (nextStepBranches == 0) {
+            // It's not end-game, while all next stage can't reach
+            // over. It means there something wrong in game
+            // settings.
+            currentPath.isDeadEnd = true;
+            currentPath.isFinished = false;
+            try result.detectedPaths.append(currentPath);
         }
     }
     return result;
@@ -496,14 +477,14 @@ fn allSkillMatched(required: *const std.AutoHashMap(usize, void),
 }
 
 fn clonePath(fromPath: *const Path, toPath: *Path) !void {
-    toPath.levelTrack = try fromPath.levelTrack.clone();
+    toPath.stageTrack = try fromPath.stageTrack.clone();
     toPath.unlockedSkills = try fromPath.unlockedSkills.clone();
     toPath.isDeadEnd = fromPath.isDeadEnd;
     toPath.hasLoop = fromPath.hasLoop;
 }
 
 fn printPath(path: *const Path) void {
-    for (path.levelTrack.items) |id| {
+    for (path.stageTrack.items) |id| {
         std.debug.print("{} -> ", .{id});
     }
     std.debug.print("\n", .{});

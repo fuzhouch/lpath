@@ -50,7 +50,7 @@ pub fn main() !void {
         gameDef.printInfo();
 
         std.debug.print("=== Begin detecting path\n", .{});
-        const paths = try gameDef.detectLoop();
+        const paths = try gameDef.analyzePath();
         std.debug.print("=== Detect path count: {}", .{paths});
     }
 }
