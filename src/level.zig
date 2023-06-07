@@ -128,19 +128,19 @@ fn analyzePathImpl(self: *GameDef) !usize {
 
             for(result.paths().items) |path| {
                 if (path.deadEnd()) {
-                    std.debug.print("[dead]: ", .{});
+                    std.debug.print("[dead]\n", .{});
                 } else if (path.loop()) {
-                    std.debug.print("[loop]: ", .{});
+                    std.debug.print("[loop]\n", .{});
                 } else {
-                    std.debug.print("[good]: ", .{});
+                    std.debug.print("[good]\n", .{});
                 }
-                std.debug.print("entry = {s}, track = ", .{lvl.id});
+                std.debug.print("  entry = {s}\n  track = ", .{lvl.id});
 
                 for(path.track()) |eachLvl| {
                     std.debug.print("{s} => ", .{self.stages[eachLvl].id});
                 }
-                std.debug.print("[done]", .{});
-                std.debug.print(" skills = ", .{});
+                std.debug.print("[done]\n", .{});
+                std.debug.print("  skills = ", .{});
                 var skillIter = path.unlockedSkills.iterator();
                 while (skillIter.next()) |kvp| {
                     var skillID = (kvp.key_ptr).*;
