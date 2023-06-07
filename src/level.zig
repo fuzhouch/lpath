@@ -109,6 +109,7 @@ fn initFromTOMLImpl(allocator: std.mem.Allocator,
 }
 
 fn analyzePathImpl(self: *GameDef) !usize {
+    var totalPaths: usize = 0;
     var entries: usize = 0;
     _ = entries;
     for (self.stages, 0..) |lvl, id| {
@@ -119,6 +120,7 @@ fn analyzePathImpl(self: *GameDef) !usize {
 
             var result = try transversal.visit(self, id);
             defer result.deinit();
+            totalPaths += result.paths().items.len;
 
             for(result.paths().items) |path| {
                 if (path.deadEnd()) {
@@ -137,7 +139,7 @@ fn analyzePathImpl(self: *GameDef) !usize {
             }
         }
     }
-    return 0;
+    return totalPaths;
 }
 
 fn loadBasicInfo(self: *GameDef, table: *tomlz.Table) !void {
