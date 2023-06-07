@@ -21,7 +21,9 @@ skills = ["pan", "glide", "fireball"]
     id = "1-1"
     description = "outside-castle"
     begin = true
-    next-stage = { "1-2" = [""] }
+    # With 2-2 here, the path from bossfight1 back to 1-1 is not
+    # considered as a loop.
+    next-stage = { "1-2" = [""], "2-2" = ["pan"] }
 
     [[stages]]
     id = "1-2"

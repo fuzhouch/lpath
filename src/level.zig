@@ -422,18 +422,16 @@ fn visitImpl(self: *Traversal, gamedef: *const GameDef, entryID: usize) !Travers
 
     var currentPath: Path = undefined;
     while (self.visitingPath.items.len > 0) {
+        var possibleLoop = false;
         currentPath = self.visitingPath.pop();
         var currentStageID = currentPath.stageTrack.items[currentPath.stageTrack.items.len-1];
         if (!currentPath.visited.contains(currentStageID)) {
             try currentPath.visited.put(currentStageID, {});
         } else {
-            // A circular path is detected. This path should stop, or we
-            // fall into an endless loop.
-            currentPath.isFinished = false;
-            currentPath.isDeadEnd = false;
-            currentPath.isLoop = true;
-            try result.detectedPaths.append(currentPath);
-            continue;
+            // A circular path is detected. However we should not stop
+            // here because it's possible that player gets new skill
+            // and need to revisit this stage.
+            possibleLoop = true;
         }
 
         if (gamedef.stages[currentStageID].endGame) {
@@ -460,12 +458,24 @@ fn visitImpl(self: *Traversal, gamedef: *const GameDef, entryID: usize) !Travers
         // Decide next stage to go. A successful move happens only
         // when a) an exit exists, and b) all required skills have
         // been unlocked.
+        //
+        // There's an additional check for circular stages - If all next
+        // stages have been visited, then we should stop visiting
+        // because current stage contributes nothing but only loop.
+        var loopConfirmedCount: usize = 0;
         var nextStepBranches: usize = 0;
         var li = gamedef.stages[currentStageID].toNextRequiredSkills.iterator();
         while (li.next()) |kvp| {
             var nextLevelID: usize = (kvp.key_ptr).*;
             var skillsRequiredToNextLevel: *const std.AutoHashMap(usize, void) = kvp.value_ptr;
             if (allSkillMatched(skillsRequiredToNextLevel, &currentPath.unlockedSkills)) {
+                if (possibleLoop and currentPath.visited.contains(nextLevelID)) {
+                    // Both current and next path have been visited.
+                    // It's indeed a loop.
+                    loopConfirmedCount += 1;
+                    continue;
+                }
+
                 if (nextStepBranches == 0) {
                     try currentPath.stageTrack.append(nextLevelID);
                     try self.visitingPath.append(currentPath);
@@ -484,6 +494,16 @@ fn visitImpl(self: *Traversal, gamedef: *const GameDef, entryID: usize) !Travers
                     nextStepBranches += 1;
                 }
             }
+        }
+
+        // If current stage is visited, and all next steps are visited,
+        // then we confirm this is really a circular stage.
+        if (possibleLoop and loopConfirmedCount == gamedef.stages[currentStageID].toNextRequiredSkills.count()) {
+            currentPath.isFinished = false;
+            currentPath.isDeadEnd = false;
+            currentPath.isLoop = true;
+            try result.detectedPaths.append(currentPath);
+            continue;
         }
 
         if (nextStepBranches == 0) {
