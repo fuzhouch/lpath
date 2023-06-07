@@ -21,20 +21,34 @@ skills = ["pan", "glide", "fireball"]
     id = "1-1"
     description = "outside-castle"
     begin = true
-    # Assumption: Given a direct next stage B, a stage A should have
-    # no more than one exit there.
-    next-stage = { "1-2" = [""], "2-1" = [""]}
+    next-stage = { "1-2" = [""] }
 
     [[stages]]
     id = "1-2"
     description = "castle-gate"
-    next-stage = { "bossfight-skeleton" = [""] }
+    next-stage = { "bossfight1" = [""] }
 
     [[stages]]
-    id = "bossfight-skeleton"
+    id = "bossfight1"
     unlock-skills = [ "pan" ]
-    next-stage = { "1-2" = [""] }
+    next-stage = { "2-1" = [""], "1-1" = [""] }
 
     [[stages]]
     id = "2-1"
+    next-stage = { "2-2" = [""], "2-3" = ["pan"], "2-4" = ["fireball"] }
+
+    [[stages]]
+    id = "2-2"
+    end = true
+
+    [[stages]]
+    id = "2-3"
+    next-stage = { "2-5" = ["glide"] }
+
+    [[stages]]
+    id = "2-4" # Unreachable due to skill unmatch in 2-1
+    end = true
+
+    [[stages]]
+    id = "2-5" # Unreachable (2-3 is deadend)
     end = true

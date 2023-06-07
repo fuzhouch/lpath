@@ -403,9 +403,9 @@ fn visitImpl(self: *Traversal, gamedef: *const GameDef, entryID: usize) !Travers
     var currentPath: Path = undefined;
     while (self.visitingPath.items.len > 0) {
         currentPath = self.visitingPath.pop();
-        var currentLevelID = currentPath.stageTrack.items[currentPath.stageTrack.items.len-1];
-        if (!currentPath.visited.contains(currentLevelID)) {
-            try currentPath.visited.put(currentLevelID, {});
+        var currentStageID = currentPath.stageTrack.items[currentPath.stageTrack.items.len-1];
+        if (!currentPath.visited.contains(currentStageID)) {
+            try currentPath.visited.put(currentStageID, {});
         } else {
             // A circular path is detected. This path should stop, or we
             // fall into an endless loop.
@@ -416,7 +416,7 @@ fn visitImpl(self: *Traversal, gamedef: *const GameDef, entryID: usize) !Travers
             continue;
         }
 
-        if (gamedef.stages[currentLevelID].endGame) {
+        if (gamedef.stages[currentStageID].endGame) {
             // We reached an end-game. One path finished.
             currentPath.isFinished = true;
             currentPath.isDeadEnd = false;
@@ -430,7 +430,7 @@ fn visitImpl(self: *Traversal, gamedef: *const GameDef, entryID: usize) !Travers
         // nothing found, it means it's a dead-end.
 
         // Update unlocked skills in this stage.
-        var si = gamedef.stages[currentLevelID].unlockableSkills.iterator();
+        var si = gamedef.stages[currentStageID].unlockableSkills.iterator();
         while (si.next()) |kvp| {
             const skillToUnlockID = (kvp.key_ptr).*;
             if (!currentPath.unlockedSkills.contains(skillToUnlockID)) {
@@ -441,7 +441,7 @@ fn visitImpl(self: *Traversal, gamedef: *const GameDef, entryID: usize) !Travers
         // when a) an exit exists, and b) all required skills have
         // been unlocked.
         var nextStepBranches: usize = 0;
-        var li = gamedef.stages[currentLevelID].toNextRequiredSkills.iterator();
+        var li = gamedef.stages[currentStageID].toNextRequiredSkills.iterator();
         while (li.next()) |kvp| {
             var nextLevelID: usize = (kvp.key_ptr).*;
             var skillsRequiredToNextLevel: *const std.AutoHashMap(usize, void) = kvp.value_ptr;
@@ -493,6 +493,7 @@ fn allSkillMatched(required: *const std.AutoHashMap(usize, void),
 }
 
 fn clonePath(fromPath: *const Path, toPath: *Path) !void {
+    toPath.visited = try fromPath.visited.clone();
     toPath.stageTrack = try fromPath.stageTrack.clone();
     toPath.unlockedSkills = try fromPath.unlockedSkills.clone();
     toPath.isDeadEnd = fromPath.isDeadEnd;
